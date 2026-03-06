@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft-style 3D Game with Inventory and Water</title>
+    <title>Minecraft-style 3D Game with Sneak</title>
     <style>
         body {
             margin: 0;
@@ -165,6 +165,7 @@
         <div>📌 Координаты: <span id="coord-display">0, 0, 0</span></div>
         <div>🎮 Режим: <span id="flight-mode">Обычный</span> (F - переключить)</div>
         <div>🔦 Радиус взаимодействия: 5 блоков</div>
+        <div>👟 Shift: приседание (не падать с края)</div>
     </div>
     <div id="crosshair"></div>
     <div id="block-indicator">
@@ -173,12 +174,12 @@
         <span id="block-type-text">Камень</span>
     </div>
     <div id="help-text">
-        WASD - движение | Пробел/Shift - вверх/вниз | Мышь - поворот<br>
-        ЛКМ - разрушить | ПКМ - построить | 1,2,3,4 - выбор блока<br>
-        B - инвентарь | ESC - отпустить мышь | F - полёт
+        WASD - движение | Пробел - прыжок | Shift - присесть (не падать)<br>
+        Мышь - поворот | ЛКМ - разрушить | ПКМ - построить<br>
+        1,2,3,4 - выбор блока | B - инвентарь | F - полёт
     </div>
     
-    <!-- Инвентарь (скрыт по умолчанию) -->
+    <!-- Инвентарь -->
     <div id="inventory-panel" style="opacity: 0; visibility: hidden;">
         <div class="inventory-slot" data-type="1" id="slot-grass">
             <div class="slot-preview" style="background-color: #7cfc00;"></div>
@@ -213,7 +214,7 @@
 
         // --- Инициализация сцены, камеры, рендерера ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB); // Голубое небо
+        scene.background = new THREE.Color(0x87CEEB);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         
@@ -247,9 +248,8 @@
         scene.add(fillLight);
 
         // --- Переменные состояния игры ---
-        const blocks = new Map(); // ключ "x y z" -> { type, mesh }
+        const blocks = new Map();
         
-        // Типы блоков: добавляем воду (тип 4)
         const blockTypes = {
             1: { name: 'Трава', color: 0x7cfc00, hex: '#7cfc00' },
             2: { name: 'Земля', color: 0x8b4513, hex: '#8b4513' },
@@ -258,7 +258,6 @@
         };
         let currentBlockType = 3;
 
-        // Функция добавления блока
         function addBlock(x, y, z, type) {
             const key = `${x} ${y} ${z}`;
             if (blocks.has(key)) return;
@@ -266,21 +265,18 @@
             const blockInfo = blockTypes[type];
             const color = blockInfo.color;
             
-            // Создаём простую текстуру через Canvas
             const canvas = document.createElement('canvas');
             canvas.width = 16;
             canvas.height = 16;
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
             ctx.fillRect(0, 0, 16, 16);
-            // Добавляем немного шума
             ctx.fillStyle = 'rgba(0,0,0,0.2)';
             for (let i = 0; i < 20; i++) {
                 ctx.fillRect(Math.floor(Math.random()*16), Math.floor(Math.random()*16), 2, 2);
             }
             const texture = new THREE.CanvasTexture(canvas);
             
-            // Для воды делаем полупрозрачный материал
             const material = new THREE.MeshStandardMaterial({ 
                 map: texture,
                 transparent: blockInfo.transparent || false,
@@ -309,50 +305,39 @@
             return blocks.get(`${x} ${y} ${z}`);
         }
 
-        // --- Генерация увеличенного мира (32x32 с холмами и озером) ---
+        // --- Генерация мира (32x32) ---
         function generateWorld() {
-            const worldSize = 32; // Увеличили поле
+            const worldSize = 32;
             const half = worldSize / 2;
             
             for (let x = -half; x < half; x++) {
                 for (let z = -half; z < half; z++) {
-                    // Базовая высота с холмами
-                    let height = 2; // минимум: камень(0), земля(1), трава(2)
-                    
-                    // Простой шум для холмов
                     let noise = Math.sin(x * 0.5) * Math.cos(z * 0.5) * 3;
-                    let extraLayers = Math.floor(noise + 2); // от 0 до 4
+                    let extraLayers = Math.floor(noise + 2);
                     
-                    // Камень (слой 0)
                     addBlock(x, 0, z, 3);
-                    // Земля (слой 1)
                     addBlock(x, 1, z, 2);
-                    // Трава (слой 2)
                     addBlock(x, 2, z, 1);
                     
                     for (let i = 3; i < 3 + extraLayers; i++) {
                         if (i === 3 + extraLayers - 1) {
-                            addBlock(x, i, z, 1); // трава на вершине
+                            addBlock(x, i, z, 1);
                         } else {
-                            addBlock(x, i, z, 2); // земля внутри
+                            addBlock(x, i, z, 2);
                         }
                     }
                 }
             }
             
-            // Добавим озеро с водой (заменим несколько блоков на поверхности на воду)
-            // В центре мира примерно (0, 3, 0) создадим углубление и зальём водой
+            // Озеро
             for (let x = -3; x <= 3; x++) {
                 for (let z = -3; z <= 3; z++) {
-                    // Убираем верхние блоки, чтобы создать котловину
                     for (let y = 2; y <= 4; y++) {
                         removeBlock(x, y, z);
                     }
-                    // На уровне y=2 ставим воду
                     addBlock(x, 2, z, 4);
                 }
             }
-            // Добавим несколько блоков воды чуть выше для имитации глубины
             addBlock(0, 3, 0, 4);
             addBlock(1, 3, 0, 4);
             addBlock(0, 3, 1, 4);
@@ -364,7 +349,7 @@
 
         // --- Игрок и управление ---
         const player = {
-            pos: new THREE.Vector3(8, 8, 8), // начальная позиция
+            pos: new THREE.Vector3(8, 8, 8),
             vel: new THREE.Vector3(0, 0, 0),
             height: 1.8,
             width: 0.6,
@@ -376,11 +361,10 @@
             gravity: 15.0
         };
 
-        // Состояния клавиш
         const keyState = {
             w: false, a: false, s: false, d: false,
             space: false, shift: false,
-            f: false, b: false // b для инвентаря
+            f: false, b: false
         };
 
         window.addEventListener('keydown', (e) => {
@@ -406,10 +390,7 @@
                     }
                     e.preventDefault();
                     break;
-                case 'Escape': 
-                    document.exitPointerLock();
-                    // При отпускании мыши скрываем инвентарь, если он открыт? можно не делать
-                    break;
+                case 'Escape': document.exitPointerLock(); break;
                 case 'Digit1': setCurrentBlock(1); e.preventDefault(); break;
                 case 'Digit2': setCurrentBlock(2); e.preventDefault(); break;
                 case 'Digit3': setCurrentBlock(3); e.preventDefault(); break;
@@ -430,7 +411,6 @@
             }
         });
 
-        // Инвентарь: переключение видимости
         const inventoryPanel = document.getElementById('inventory-panel');
         function toggleInventory() {
             if (inventoryPanel.style.visibility === 'hidden' || inventoryPanel.style.opacity === '0') {
@@ -442,12 +422,10 @@
             }
         }
 
-        // Выбор блока из инвентаря по клику
         document.querySelectorAll('.inventory-slot').forEach(slot => {
             slot.addEventListener('click', () => {
                 const type = parseInt(slot.dataset.type);
                 setCurrentBlock(type);
-                // Можно автоматически закрыть инвентарь после выбора
                 inventoryPanel.style.visibility = 'hidden';
                 inventoryPanel.style.opacity = '0';
             });
@@ -459,7 +437,6 @@
             document.getElementById('block-type-text').innerText = block.name;
             document.getElementById('block-color-preview').style.backgroundColor = block.hex;
             
-            // Подсветка выбранного слота в инвентаре
             document.querySelectorAll('.inventory-slot').forEach(slot => {
                 slot.classList.remove('selected');
                 if (parseInt(slot.dataset.type) === type) {
@@ -468,7 +445,7 @@
             });
         }
 
-        // --- Мышь: захват и вращение ---
+        // --- Мышь ---
         let mouseSensitivity = 0.002;
         let pitch = 0;
         let yaw = 0;
@@ -503,9 +480,9 @@
             camera.rotation.set(pitch, yaw, 0);
         }
 
-        // --- Raycaster для взаимодействия ---
+        // --- Raycaster ---
         const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2(0, 0); // центр
+        const mouse = new THREE.Vector2(0, 0);
 
         function onMouseDown(e) {
             if (document.pointerLockElement !== renderer.domElement) return;
@@ -521,9 +498,9 @@
                 const blockMesh = hit.object;
                 const blockPos = blockMesh.userData.position;
                 
-                if (e.button === 0) { // ЛКМ - разрушить
+                if (e.button === 0) {
                     removeBlock(blockPos.x, blockPos.y, blockPos.z);
-                } else if (e.button === 2) { // ПКМ - поставить
+                } else if (e.button === 2) {
                     const normal = hit.face.normal.clone();
                     const newPos = {
                         x: blockPos.x + normal.x,
@@ -539,7 +516,7 @@
 
         window.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        // --- Коллизии: проверка пересечения AABB игрока с блоками ---
+        // --- Коллизии ---
         function playerCollides(pos) {
             const halfWidth = player.width / 2;
             const minX = pos.x - halfWidth;
@@ -560,12 +537,19 @@
             return false;
         }
 
-        // --- Обновление игрока (движение, гравитация, коллизии) ---
+        // Проверка, есть ли блок под ногами в заданной позиции (на уровне ног)
+        function blockUnderFeet(pos) {
+            const underPos = pos.clone();
+            underPos.y -= 0.1; // чуть ниже ног
+            return playerCollides(underPos);
+        }
+
+        // --- Обновление игрока ---
         function updatePlayer(deltaTime) {
             if (!deltaTime) return;
             
-            // Движение в режиме полёта
             if (player.flying) {
+                // Полёт (без изменений)
                 const speed = player.speed * deltaTime;
                 const dir = new THREE.Vector3();
                 camera.getWorldDirection(dir);
@@ -575,11 +559,10 @@
                 const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), dir).normalize();
                 
                 let move = new THREE.Vector3(0, 0, 0);
-                // ИНВЕРСИЯ: теперь A - вправо, D - влево (поменяли местами)
                 if (keyState.w) move.add(dir);
                 if (keyState.s) move.sub(dir);
-                if (keyState.a) move.add(right);   // A теперь вправо
-                if (keyState.d) move.sub(right);   // D теперь влево
+                if (keyState.a) move.add(right);
+                if (keyState.d) move.sub(right);
                 
                 if (keyState.space) move.y += 1;
                 if (keyState.shift) move.y -= 1;
@@ -590,7 +573,6 @@
                 if (!playerCollides(newPos)) {
                     player.pos.copy(newPos);
                 } else {
-                    // Поосевое скользящее движение
                     newPos = player.pos.clone();
                     newPos.x += move.x;
                     if (!playerCollides(newPos)) player.pos.x = newPos.x;
@@ -604,8 +586,13 @@
                 
                 player.vel.set(0, 0, 0);
             } else {
-                // Обычный режим
-                const speed = player.speed * deltaTime;
+                // Обычный режим с возможностью приседания (sneak)
+                let speed = player.speed * deltaTime;
+                const isSneaking = keyState.shift && player.onGround; // Shift на земле = приседание
+                if (isSneaking) {
+                    speed *= 0.5; // медленнее движение при приседании
+                }
+                
                 const dir = new THREE.Vector3();
                 camera.getWorldDirection(dir);
                 dir.y = 0;
@@ -613,15 +600,27 @@
                 const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), dir).normalize();
                 
                 let moveDir = new THREE.Vector3(0, 0, 0);
-                // Инвертировали A и D
                 if (keyState.w) moveDir.add(dir);
                 if (keyState.s) moveDir.sub(dir);
-                if (keyState.a) moveDir.add(right);   // A -> вправо
-                if (keyState.d) moveDir.sub(right);   // D -> влево
+                if (keyState.a) moveDir.add(right);
+                if (keyState.d) moveDir.sub(right);
                 
                 if (moveDir.length() > 0) moveDir.normalize().multiplyScalar(speed);
                 
-                // Горизонтальное перемещение с коллизиями
+                // Проверка на падение с края при приседании
+                if (isSneaking) {
+                    // Проверяем, есть ли блок под ногами в новой позиции (после смещения по горизонтали)
+                    const testPos = player.pos.clone();
+                    testPos.x += moveDir.x;
+                    testPos.z += moveDir.z;
+                    if (!blockUnderFeet(testPos)) {
+                        // Нет блока под ногами - не даём двигаться в этом направлении
+                        moveDir.x = 0;
+                        moveDir.z = 0;
+                    }
+                }
+                
+                // Горизонтальное перемещение
                 let newPos = player.pos.clone();
                 newPos.x += moveDir.x;
                 if (!playerCollides(newPos)) player.pos.x = newPos.x;
@@ -629,14 +628,14 @@
                 newPos.z += moveDir.z;
                 if (!playerCollides(newPos)) player.pos.z = newPos.z;
                 
-                // Вертикаль
+                // Вертикаль (гравитация и прыжок)
                 const groundCheckPos = player.pos.clone();
                 groundCheckPos.y -= 0.05;
                 player.onGround = playerCollides(groundCheckPos);
                 
                 if (player.onGround) {
                     player.vel.y = 0;
-                    if (keyState.space) {
+                    if (keyState.space && !isSneaking) { // нельзя прыгнуть во время приседания (как в Minecraft)
                         player.vel.y = player.jumpSpeed;
                         player.onGround = false;
                     }
@@ -648,7 +647,7 @@
                 newPos.y += player.vel.y * deltaTime;
                 if (playerCollides(newPos)) {
                     if (player.vel.y > 0) {
-                        player.vel.y = 0; // удар головой
+                        player.vel.y = 0;
                     } else {
                         player.vel.y = 0;
                         player.onGround = true;
@@ -659,12 +658,11 @@
             }
             
             camera.position.copy(player.pos.clone().add(new THREE.Vector3(0, player.eyeHeight, 0)));
-            
             document.getElementById('coord-display').innerText = 
                 `${player.pos.x.toFixed(1)}, ${player.pos.y.toFixed(1)}, ${player.pos.z.toFixed(1)}`;
         }
 
-        // --- Основной цикл анимации ---
+        // --- Основной цикл ---
         let clock = new THREE.Clock();
 
         function animate() {
@@ -682,7 +680,6 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Начальный выбор блока
         setCurrentBlock(3);
     </script>
 </body>
